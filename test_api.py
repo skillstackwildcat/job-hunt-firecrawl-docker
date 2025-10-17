@@ -31,6 +31,11 @@ def call_recommend(
     max_jobs: int,
     top_n: int,
 ) -> None:
+    # Ensure proper URL format - only add https if no protocol specified
+    if not base_url.startswith(('http://', 'https://')):
+        base_url = f"https://{base_url}"
+    
+    # Remove any trailing slashes and add /recommend
     url = f"{base_url.rstrip('/')}/recommend"
     payload = {
         "resume_data": resume,
@@ -40,12 +45,21 @@ def call_recommend(
     if jobs_page_url:
         payload["jobs_page_url"] = jobs_page_url
 
-    r = requests.post(url, json=payload, timeout=120)
-    print(f"Status: {r.status_code}")
     try:
-        print(json.dumps(r.json(), indent=2))
-    except Exception:
-        print(r.text)
+        print(f"Calling: {url}")
+        r = requests.post(url, json=payload, timeout=120, verify=True)
+        print(f"Status: {r.status_code}")
+        try:
+            print(json.dumps(r.json(), indent=2))
+        except Exception:
+            print(r.text)
+    except requests.exceptions.ConnectionError as e:
+        print(f"Connection error: {e}")
+        print("Make sure your Railway URL is correct and the service is running")
+    except requests.exceptions.Timeout as e:
+        print(f"Timeout error: {e}")
+    except Exception as e:
+        print(f"Error: {e}")
 
 
 def main() -> None:
@@ -64,8 +78,6 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    base_url = f"http://{args.host}:{args.port}"
-
     if args.serve and args.call:
         parser.error("Use --serve or --call, not both")
 
@@ -74,6 +86,8 @@ def main() -> None:
         return
 
     if args.call:
+        # For API calls, use the host as-is (it might already be a full URL)
+        base_url = args.host
         resume = DUMMY_RESUME if args.dummy else args.resume
         jobs_url = DUMMY_JOBS_PAGE_URL if args.dummy else args.jobs_page_url
         call_recommend(base_url, resume, jobs_url, args.max_jobs, args.top_n)
